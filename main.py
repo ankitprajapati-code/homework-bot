@@ -34,31 +34,37 @@ def check_homework():
         session.get(LOGIN_URL, headers=headers)
         session.post(LOGIN_URL, data=login_data, headers=headers)
 
-        # 2. Homework page GET karke student dropdown ki value nikalte hain
+        # 2. Homework page khol kar form ke saare fields detect karein
         hw_page = session.get(HOMEWORK_URL, headers=headers)
         soup_page = BeautifulSoup(hw_page.text, 'html.parser')
 
-        # Dropdown se student ki value (jaise Admission ID) dhoondhna
-        student_val = ''
-        select_tag = soup_page.find('select')
-        if select_tag:
-            for opt in select_tag.find_all('option'):
-                if opt.get('value') and opt.get('value') != '':
-                    student_val = opt.get('value')
-                    break
+        form_data = {}
+        form = soup_page.find('form')
+        if form:
+            for inp in form.find_all(['input', 'select']):
+                name = inp.get('name')
+                if not name:
+                    continue
+                val = inp.get('value', '')
+                if inp.name == 'select':
+                    opt = inp.find('option')
+                    if opt and opt.get('value'):
+                        val = opt.get('value')
+                form_data[name] = val
 
+        # Aaj ki date aur report submit button set karna
         today_date = datetime.datetime.now().strftime("%Y-%m-%d")
         today_display = datetime.datetime.now().strftime("%d-%b-%Y")
 
-        # 3. 'Show Report' form data submit karna (jaise browser me karte hain)
-        report_data = {
-            'student': student_val,
-            'search_date': today_date,
-            'submit': 'Show Report'
-        }
+        for key in list(form_data.keys()):
+            k_lower = key.lower()
+            if 'date' in k_lower:
+                form_data[key] = today_date
 
-        # POST request bhej kar report load karenge
-        response = session.post(HOMEWORK_URL, data=report_data, headers=headers)
+        form_data['submit'] = 'Show Report'
+
+        # 3. Report form POST request bhej kar data load karein
+        response = session.post(HOMEWORK_URL, data=form_data, headers=headers)
         soup = BeautifulSoup(response.text, 'html.parser')
 
         homework_list = []
@@ -79,7 +85,7 @@ def check_homework():
             send_telegram_msg(msg)
             print("Homework sent successfully!")
         else:
-            send_telegram_msg(f"ℹ️ *{today_display}* : Login successful hai, aur report bhi generate ki, par aaj ke liye koi homework entries nahi mili.")
+            send_telegram_msg(f"ℹ️ *{today_display}*: Report generate ho gayi, par table me homework rows read nahi ho payi.")
 
     except Exception as e:
         send_telegram_msg(f"⚠️ *Bot Error*: {e}")
