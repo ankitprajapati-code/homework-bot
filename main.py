@@ -34,13 +34,34 @@ def check_homework():
         session.get(LOGIN_URL, headers=headers)
         session.post(LOGIN_URL, data=login_data, headers=headers)
 
-        # 2. Homework page fetch karein
-        response = session.get(HOMEWORK_URL, headers=headers)
+        # 2. Homework page GET karke student dropdown ki value nikalte hain
+        hw_page = session.get(HOMEWORK_URL, headers=headers)
+        soup_page = BeautifulSoup(hw_page.text, 'html.parser')
+
+        # Dropdown se student ki value (jaise Admission ID) dhoondhna
+        student_val = ''
+        select_tag = soup_page.find('select')
+        if select_tag:
+            for opt in select_tag.find_all('option'):
+                if opt.get('value') and opt.get('value') != '':
+                    student_val = opt.get('value')
+                    break
+
+        today_date = datetime.datetime.now().strftime("%Y-%m-%d")
+        today_display = datetime.datetime.now().strftime("%d-%b-%Y")
+
+        # 3. 'Show Report' form data submit karna (jaise browser me karte hain)
+        report_data = {
+            'student': student_val,
+            'search_date': today_date,
+            'submit': 'Show Report'
+        }
+
+        # POST request bhej kar report load karenge
+        response = session.post(HOMEWORK_URL, data=report_data, headers=headers)
         soup = BeautifulSoup(response.text, 'html.parser')
 
         homework_list = []
-        
-        # Website par jitni bhi tables hain sabhi ko check karenge
         tables = soup.find_all('table')
         for table in tables:
             rows = table.find_all('tr')
@@ -48,22 +69,17 @@ def check_homework():
                 cols = row.find_all(['td', 'th'])
                 cols_text = [c.text.strip() for c in cols]
                 
-                # Agar row me kam se kam 4 columns hain (Period, Subject, Classwork, Homework)
                 if len(cols_text) >= 4:
                     period, subject, classwork, homework = cols_text[:4]
-                    
-                    # Header titles ya empty entries ko chhod kar baki sab add karenge
-                    if homework and "No homework entered" not in homework and "homework" not in homework.lower() and "subject" not in subject.lower():
+                    if homework and "No homework entered" not in homework and "homework" not in homework.lower() and "subject" not in subject.lower() and "period" not in period.lower():
                         homework_list.append(f"📌 *{subject}* ({period}):\n📖 *CW*: {classwork}\n✏️ *HW*: {homework}")
-
-        today_display = datetime.datetime.now().strftime("%d-%b-%Y")
 
         if homework_list:
             msg = f"📚 *Aaj Ka Homework ({today_display})*\n\n" + "\n\n".join(homework_list)
             send_telegram_msg(msg)
-            print("Homework successfully sent!")
+            print("Homework sent successfully!")
         else:
-            send_telegram_msg(f"ℹ️ *{today_display}*: Login successful hai, par table me koi active homework entries nahi mili.")
+            send_telegram_msg(f"ℹ️ *{today_display}* : Login successful hai, aur report bhi generate ki, par aaj ke liye koi homework entries nahi mili.")
 
     except Exception as e:
         send_telegram_msg(f"⚠️ *Bot Error*: {e}")
