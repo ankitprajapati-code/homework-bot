@@ -20,37 +20,44 @@ def send_telegram_msg(message):
 def check_homework():
     session = requests.Session()
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-    
-    login_data = {
-        'username': SCHOOL_USERNAME,
-        'password': SCHOOL_PASSWORD,
-        'submit': 'Login'
-    }
 
     try:
-        print("Attempting login...")
-        login_resp = session.post(LOGIN_URL, data=login_data, headers=headers)
-        print(f"Login status code: {login_resp.status_code}")
+        # 1. Login page pehle GET karke dekhte hain
+        login_page = session.get(LOGIN_URL, headers=headers)
+        soup_login = BeautifulSoup(login_page.text, 'html.parser')
         
-        print("Fetching homework page...")
-        response = session.get(HOMEWORK_URL, headers=headers)
-        print(f"Homework page status code: {response.status_code}")
-        
-        # Print page snippet for debugging in GitHub logs
-        print("Page Content Snippet:")
-        print(response.text[:400])
+        # Form inputs dhoondhte hain
+        inputs = soup_login.find_all('input')
+        input_names = [inp.get('name') for inp in inputs if inp.get('name')]
+        print(f"Login form input names found on website: {input_names}")
 
+        # Web form fields try karte hain
+        login_data = {}
+        for inp_name in input_names:
+            name_lower = inp_name.lower()
+            if 'user' in name_lower or 'admin' in name_lower or 'id' in name_lower or 'login' in name_lower or 'roll' in name_lower:
+                login_data[inp_name] = SCHOOL_USERNAME
+            elif 'pass' in name_lower or 'pwd' in name_lower:
+                login_data[inp_name] = SCHOOL_PASSWORD
+            elif 'sub' in name_lower or 'btn' in name_lower or 'log' in name_lower:
+                login_data[inp_name] = 'Login'
+
+        # Fallback agar names nahi mile
+        if not login_data:
+            login_data = {'username': SCHOOL_USERNAME, 'password': SCHOOL_PASSWORD, 'submit': 'Login'}
+
+        print(f"Submitting payload with keys: {list(login_data.keys())}")
+        login_resp = session.post(LOGIN_URL, data=login_data, headers=headers)
+
+        # 2. Homework page fetch karein
+        response = session.get(HOMEWORK_URL, headers=headers)
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Check if redirected to login page
+
         if "login" in response.text.lower() and "password" in response.text.lower() and "homework" not in response.text.lower():
-            send_telegram_msg("⚠️ *Bot Error*: School website par Login fail ho gaya hai (Session/Form fields mismatch).")
-            print("Error: Login failed or redirected back to login page.")
+            send_telegram_msg(f"⚠️ *Bot Error*: School website par Login fail ho gaya.\nForm fields detect huye the: `{input_names}`")
             return
 
         rows = soup.find_all('tr')
-        print(f"Total table rows found: {len(rows)}")
-        
         homework_list = []
         for row in rows:
             cols = row.find_all(['td', 'th'])
@@ -66,14 +73,10 @@ def check_homework():
         if homework_list:
             msg = f"📚 *Aaj Ka Homework ({today_str})*\n\n" + "\n\n".join(homework_list)
             send_telegram_msg(msg)
-            print("Telegram message sent successfully!")
         else:
-            send_telegram_msg(f"ℹ️ *{today_str}*: Login ho gaya, par table me homework rows match nahi hui.")
-            print("No homework rows matched.")
+            send_telegram_msg(f"ℹ️ *{today_str}*: Login ho gaya hai, par website par abhi homework update nahi hua hai.")
 
     except Exception as e:
-        err_msg = f"Error occurred: {e}"
-        print(err_msg)
         send_telegram_msg(f"⚠️ *Bot Error*: {e}")
 
 if __name__ == "__main__":
