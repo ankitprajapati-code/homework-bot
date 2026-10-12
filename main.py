@@ -40,38 +40,50 @@ def take_homework_screenshot():
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
     try:
-        # 1. Login Page
+        # 1. Login Page Kholein
         driver.get(LOGIN_URL)
-        time.sleep(2)
+        time.sleep(3)
 
-        # 2. Login Details Fill Karein
+        # 2. Parent/Student Role Tab Click Karein (agar zaroori ho)
+        try:
+            parent_tab = driver.find_element(By.XPATH, "//*[contains(text(), 'Parent') or contains(text(), 'Student')]")
+            parent_tab.click()
+            time.sleep(1)
+        except:
+            pass
+
+        # 3. Username aur Password Bharein
         username_field = driver.find_element(By.NAME, "username")
         password_field = driver.find_element(By.NAME, "password")
 
+        username_field.clear()
         username_field.send_keys(SCHOOL_USERNAME)
+        password_field.clear()
         password_field.send_keys(SCHOOL_PASSWORD)
 
+        # 4. 'SECURE LOGIN' Button Click Karein
         try:
-            submit_btn = driver.find_element(By.NAME, "submit")
-            submit_btn.click()
+            secure_btn = driver.find_element(By.XPATH, "//button[contains(text(), 'SECURE LOGIN')] | //button[@type='submit']")
+            secure_btn.click()
         except:
             password_field.submit()
 
+        # Login hone ke liye thoda wait karein
+        time.sleep(5)
+
+        # 5. Homework Page Par Jayein
+        driver.get(HOMEWORK_URL)
         time.sleep(3)
 
-        # 3. Homework Page
-        driver.get(HOMEWORK_URL)
-        time.sleep(2)
-
-        # 4. 'Show Report' Button Click
+        # 6. 'Show Report' Button Click Karein
         try:
             show_btn = driver.find_element(By.XPATH, "//button[contains(text(),'Show Report')] | //input[@value='Show Report']")
             show_btn.click()
-            time.sleep(2)
+            time.sleep(3)
         except Exception as e:
-            print(f"Show report auto-click: {e}")
+            print(f"Show report click notice: {e}")
 
-        # 5. Screenshot Save & Send
+        # 7. Screenshot Save & Send Karein
         screenshot_path = "homework.png"
         driver.save_screenshot(screenshot_path)
 
@@ -82,7 +94,7 @@ def take_homework_screenshot():
         print("Homework screenshot sent successfully!")
 
     except Exception as e:
-        send_telegram_msg(f"⚠️ *Bot Screenshot Error*: {e}")
+        send_telegram_msg(f"⚠️ *Bot Error*: {e}")
         print(f"Error: {e}")
     finally:
         driver.quit()
