@@ -2,7 +2,7 @@ name: Daily School Homework Bot
 
 on:
   schedule:
-    - cron: '30 10 * * *' # Har roz shaam 4:00 PM IST par chalega
+    - cron: '30 10 * * *' # Shaam 4:00 PM IST
   workflow_dispatch:
 
 jobs:
@@ -17,6 +17,9 @@ jobs:
         with:
           python-version: '3.x'
 
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v1
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
@@ -24,4 +27,6 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SCHOOL_USERNAME: ${{ secrets.SCHOOL_USERNAME }}
+          SCHOOL_PASSWORD: ${{ secrets.SCHOOL_PASSWORD }}
         run: python main.py
