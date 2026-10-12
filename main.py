@@ -1,7 +1,12 @@
 import os
+import time
 import requests
-from bs4 import BeautifulSoup
 import datetime
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
@@ -11,93 +16,76 @@ SCHOOL_PASSWORD = os.environ.get("SCHOOL_PASSWORD")
 LOGIN_URL = "https://gbgs.ac.in/school1/login.php"
 HOMEWORK_URL = "https://gbgs.ac.in/school1/p_homeworkold.php"
 
+def send_telegram_photo(photo_path, caption=""):
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+        with open(photo_path, 'rb') as photo:
+            files = {'photo': photo}
+            data = {'chat_id': TELEGRAM_CHAT_ID, 'caption': caption}
+            requests.post(url, data=data, files=files)
+
 def send_telegram_msg(message):
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         data = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"}
         requests.post(url, data=data)
 
-def check_homework():
-    session = requests.Session()
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+def take_homework_screenshot():
+    options = Options()
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--window-size=1280,1024')
 
-    login_data = {
-        'user_type': 'student',
-        'username': SCHOOL_USERNAME,
-        'password': SCHOOL_PASSWORD,
-        'submit': 'Login',
-        'login': 'Login'
-    }
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
     try:
-        # 1. Login session start karein
-        session.get(LOGIN_URL, headers=headers)
-        session.post(LOGIN_URL, data=login_data, headers=headers)
+        # 1. Login Page
+        driver.get(LOGIN_URL)
+        time.sleep(2)
 
-        # 2. Homework page khol kar form data detect karein
-        hw_page = session.get(HOMEWORK_URL, headers=headers)
-        soup_page = BeautifulSoup(hw_page.text, 'html.parser')
+        # 2. Login Details Fill Karein
+        username_field = driver.find_element(By.NAME, "username")
+        password_field = driver.find_element(By.NAME, "password")
 
-        form_data = {}
-        form = soup_page.find('form')
-        if form:
-            for inp in form.find_all(['input', 'select']):
-                name = inp.get('name')
-                if not name:
-                    continue
-                val = inp.get('value', '')
-                if inp.name == 'select':
-                    opt = inp.find('option')
-                    if opt and opt.get('value'):
-                        val = opt.get('value')
-                form_data[name] = val
+        username_field.send_keys(SCHOOL_USERNAME)
+        password_field.send_keys(SCHOOL_PASSWORD)
 
-        today_date = datetime.datetime.now().strftime("%Y-%m-%d")
-        today_display = datetime.datetime.now().strftime("%d-%b-%Y")
+        try:
+            submit_btn = driver.find_element(By.NAME, "submit")
+            submit_btn.click()
+        except:
+            password_field.submit()
 
-        for key in list(form_data.keys()):
-            if 'date' in key.lower():
-                form_data[key] = today_date
+        time.sleep(3)
 
-        form_data['submit'] = 'Show Report'
+        # 3. Homework Page
+        driver.get(HOMEWORK_URL)
+        time.sleep(2)
 
-        # 3. Report POST request bhejna
-        response = session.post(HOMEWORK_URL, data=form_data, headers=headers)
-        soup = BeautifulSoup(response.text, 'html.parser')
+        # 4. 'Show Report' Button Click
+        try:
+            show_btn = driver.find_element(By.XPATH, "//button[contains(text(),'Show Report')] | //input[@value='Show Report']")
+            show_btn.click()
+            time.sleep(2)
+        except Exception as e:
+            print(f"Show report auto-click: {e}")
 
-        homework_list = []
-        tables = soup.find_all('table')
-        
-        for table in tables:
-            rows = table.find_all('tr')
-            for row in rows:
-                cols = row.find_all(['td', 'th'])
-                cols_text = [c.text.strip() for c in cols]
-                
-                # Flexible check: agar row me 3 ya usse zyada columns hain
-                if len(cols_text) >= 3:
-                    if len(cols_text) >= 4:
-                        period, subject, classwork, homework = cols_text[:4]
-                    else:
-                        period, subject, homework = cols_text[:3]
-                        classwork = "N/A"
-                    
-                    # Headers aur empty entries ko filter out karna
-                    if "subject" in subject.lower() or "period" in period.lower():
-                        continue
-                    
-                    if homework and "no homework entered" not in homework.lower() and homework != "-":
-                        homework_list.append(f"📌 *{subject}* ({period}):\n📖 *CW*: {classwork}\n✏️ *HW*: {homework}")
+        # 5. Screenshot Save & Send
+        screenshot_path = "homework.png"
+        driver.save_screenshot(screenshot_path)
 
-        if homework_list:
-            msg = f"📚 *Aaj Ka Homework ({today_display})*\n\n" + "\n\n".join(homework_list)
-            send_telegram_msg(msg)
-            print("Homework successfully sent!")
-        else:
-            send_telegram_msg(f"ℹ️ *{today_display}*: Report aa gayi hai, lekin table me koi active homework text nahi mila.")
+        today_str = datetime.datetime.now().strftime("%d-%b-%Y")
+        caption = f"📸 *School Homework ({today_str})*"
+
+        send_telegram_photo(screenshot_path, caption=caption)
+        print("Homework screenshot sent successfully!")
 
     except Exception as e:
-        send_telegram_msg(f"⚠️ *Bot Error*: {e}")
+        send_telegram_msg(f"⚠️ *Bot Screenshot Error*: {e}")
+        print(f"Error: {e}")
+    finally:
+        driver.quit()
 
 if __name__ == "__main__":
-    check_homework()
+    take_homework_screenshot()
