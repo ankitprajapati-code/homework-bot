@@ -34,56 +34,36 @@ def check_homework():
         session.get(LOGIN_URL, headers=headers)
         session.post(LOGIN_URL, data=login_data, headers=headers)
 
-        # 2. Homework page par GET request bhej kar form parameters trace karein
-        hw_page = session.get(HOMEWORK_URL, headers=headers)
-        soup_page = BeautifulSoup(hw_page.text, 'html.parser')
-
-        today_date = datetime.datetime.now().strftime("%Y-%m-%d") # Format YYYY-MM-DD ya DD/MM/YYYY
-        today_display = datetime.datetime.now().strftime("%d-%b-%Y")
-
-        # Student selection aur Show Report ke liye payload
-        # Agar student dropdown input me koi specific ID hai toh parse karein
-        student_option = soup_page.find('option')
-        student_val = student_option.get('value') if student_option else ''
-
-        report_payload = {
-            'student_id': student_val,
-            'search_date': today_date,
-            'date': datetime.datetime.now().strftime("%d/%m/%Y"),
-            'submit': 'Show Report',
-            'search': 'Show Report'
-        }
-
-        # POST request to submit 'Show Report'
-        response = session.post(HOMEWORK_URL, data=report_payload, headers=headers)
-        
-        # Fallback agar GET response me hi data mil jaye
-        if "INFORMATION TECHNOLOGY" not in response.text and "ENGLISH" not in response.text:
-            response = hw_page
-
+        # 2. Homework page fetch karein
+        response = session.get(HOMEWORK_URL, headers=headers)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        rows = soup.find_all('tr')
         homework_list = []
         
-        for row in rows:
-            cols = row.find_all(['td', 'th'])
-            cols_text = [c.text.strip() for c in cols]
-            
-            # Period, Subject, Classwork, Homework columns
-            if len(cols_text) >= 4:
-                period, subject, classwork, homework = cols_text[:4]
+        # Website par jitni bhi tables hain sabhi ko check karenge
+        tables = soup.find_all('table')
+        for table in tables:
+            rows = table.find_all('tr')
+            for row in rows:
+                cols = row.find_all(['td', 'th'])
+                cols_text = [c.text.strip() for c in cols]
                 
-                # Header row aur empty homework filter out karein
-                if homework and "No homework entered" not in homework and "homework" not in homework.lower() and "period" not in period.lower():
-                    homework_list.append(f"📌 *{subject}* ({period}):\n📖 *Classwork*: {classwork}\n✏️ *Homework*: {homework}")
+                # Agar row me kam se kam 4 columns hain (Period, Subject, Classwork, Homework)
+                if len(cols_text) >= 4:
+                    period, subject, classwork, homework = cols_text[:4]
+                    
+                    # Header titles ya empty entries ko chhod kar baki sab add karenge
+                    if homework and "No homework entered" not in homework and "homework" not in homework.lower() and "subject" not in subject.lower():
+                        homework_list.append(f"📌 *{subject}* ({period}):\n📖 *CW*: {classwork}\n✏️ *HW*: {homework}")
+
+        today_display = datetime.datetime.now().strftime("%d-%b-%Y")
 
         if homework_list:
             msg = f"📚 *Aaj Ka Homework ({today_display})*\n\n" + "\n\n".join(homework_list)
             send_telegram_msg(msg)
-            print("Homework sent successfully!")
+            print("Homework successfully sent!")
         else:
-            send_telegram_msg(f"ℹ️ *{today_display}*: Website connect ho gayi par homework rows match nahi hui.")
+            send_telegram_msg(f"ℹ️ *{today_display}*: Login successful hai, par table me koi active homework entries nahi mili.")
 
     except Exception as e:
         send_telegram_msg(f"⚠️ *Bot Error*: {e}")
