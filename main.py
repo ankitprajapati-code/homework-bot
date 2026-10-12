@@ -4,14 +4,17 @@ import requests
 import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import Select
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-SCHOOL_USERNAME = os.environ.get("SCHOOL_USERNAME")
-SCHOOL_PASSWORD = os.environ.get("SCHOOL_PASSWORD")
+
+# Aapke bataye gaye details (GitHub secrets ya direct default values)
+SCHOOL_USERNAME = os.environ.get("SCHOOL_USERNAME", "2016")
+SCHOOL_PASSWORD = os.environ.get("SCHOOL_PASSWORD", "@123")
 
 LOGIN_URL = "https://gbgs.ac.in/school1/login.php"
 HOMEWORK_URL = "https://gbgs.ac.in/school1/p_homeworkold.php"
@@ -44,15 +47,18 @@ def take_homework_screenshot():
         driver.get(LOGIN_URL)
         time.sleep(3)
 
-        # 2. Parent/Student Role Tab Click Karein (agar zaroori ho)
+        # 2. Academic Session Dropdown se '2026-2027' select karein
         try:
-            parent_tab = driver.find_element(By.XPATH, "//*[contains(text(), 'Parent') or contains(text(), 'Student')]")
-            parent_tab.click()
-            time.sleep(1)
-        except:
-            pass
+            session_select = driver.find_element(By.TAG_NAME, "select")
+            select = Select(session_select)
+            for option in select.options:
+                if "2026" in option.text or "2026-2027" in option.text:
+                    select.select_by_visible_text(option.text)
+                    break
+        except Exception as e:
+            print(f"Academic session select notice: {e}")
 
-        # 3. Username aur Password Bharein
+        # 3. Admission No. (Username) aur Password Bharein
         username_field = driver.find_element(By.NAME, "username")
         password_field = driver.find_element(By.NAME, "password")
 
@@ -68,7 +74,7 @@ def take_homework_screenshot():
         except:
             password_field.submit()
 
-        # Login hone ke liye thoda wait karein
+        # Login process ke liye 5 seconds wait karein
         time.sleep(5)
 
         # 5. Homework Page Par Jayein
@@ -83,13 +89,14 @@ def take_homework_screenshot():
         except Exception as e:
             print(f"Show report click notice: {e}")
 
-        # 7. Screenshot Save & Send Karein
+        # 7. Page ka Screenshot Save Karein
         screenshot_path = "homework.png"
         driver.save_screenshot(screenshot_path)
 
         today_str = datetime.datetime.now().strftime("%d-%b-%Y")
         caption = f"📸 *School Homework ({today_str})*"
 
+        # 8. Telegram Par Photo Bhejein
         send_telegram_photo(screenshot_path, caption=caption)
         print("Homework screenshot sent successfully!")
 
